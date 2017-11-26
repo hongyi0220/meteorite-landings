@@ -1,0 +1,137 @@
+class Graph extends React.Component {
+   constructor(props) {
+      super(props);
+
+      this.makeGraph = this.makeGraph.bind(this);
+      this.fetchData = this.fetchData.bind(this);
+      this.bindData = this.bindData.bind(this);
+   }
+   
+   makeGraph(dataset) {
+      // Set dimensions for svg
+      const width = document.documentElement.clientWidth || window.innerWidth; 
+      const height = document.documentElement.clientHeight || window.innerHeight;
+      let scale = 150;
+      
+      // Define projection and its position
+      const mercatorProjection = d3.geoMercator()
+                                 .scale(scale)
+                                 .translate([width / 2, height / 2]);
+      
+      // Use geoPath function to turn lat/longitude coords into screen coordinates
+      const geoPath = d3.geoPath().projection(mercatorProjection);
+      
+      const svg = d3.select('.container').append('svg')
+                                     .attr('width', width)
+                                     .attr('height', height);
+      
+      // Zoom-in/out
+      const zoomed = () => {
+         group.attr('transform', d3.event.transform);
+         d3.select('.meteorite').attr('transform', d3.event.transform);
+      }
+      
+      const zoom = d3.zoom()
+                     .scaleExtent([1, 10])
+                     .on('zoom', zoomed);
+      
+      const group = svg.append('g');
+      svg.call(zoom);
+      
+      group.selectAll('path')
+           .data(dataset.features).enter()
+           .append('path')
+           .attr('fill', 'rgb(239,230,215)')
+           .attr('stroke', '#fff')
+           .attr('d', geoPath);
+      //Bind meteortie landing data
+      this.fetchData().then.bindData(mercatorProjection);
+    
+   }
+   
+   bindData(dataset, projection) {
+      const svg = d3.select('svg');
+      const geoPath = d3.geoPath().projection(projection);
+      const tooltip = d3.select('.tooltip')
+                        .style('visibility', 'hidden');
+      const meteorites = dataset.features;
+      
+      // Set svg path's fill to radial-gradient
+      d3.select('svg')
+        .append('defs')
+        .append('radialGradient')
+        .attr('id', 'radialGradient')
+        .append('stop')
+        .attr('offset', '10%')
+        .attr('stop-color', 'rgba(255,215,0,1)');
+      d3.select('#radialGradient')
+        .append('stop')
+        .attr('offset', '50%')
+        .attr('stop-color', 'rgba(255,140,0,0.6)');
+      d3.select('#radialGradient')
+        .append('stop')
+        .attr('offset', '80%')
+        .attr('stop-color', 'rgba(255,69,0,.2)');
+      
+      const meteoriteIncidents = svg.append('g')
+         .attr('class', 'meteorite')
+         .selectAll('path')
+         .data(meteorites)
+         .enter()
+         .append('path')
+         .attr('fill', 'url(#radialGradient)')
+         .attr('d', geoPath.pointRadius(d => {
+            const mass = +d.properties.mass;
+            // Adujst mass number to radius to fit on screen
+            if (mass < 1000000) return Math.log10(mass);
+            else return Math.log(mass);
+         }))
+         .attr('class', 'incident')
+         .on('mousemove', d => {
+         
+            const datum = d.properties;
+            const year = datum.year.replace(/T\d+:\d+:\d+.\d+/, '');
+            tooltip.style('visibility', 'visible')
+                   .style('left', () => (d3.event.x) - 80 + 'px')
+                   .style('top', () => (d3.event.y) - 160 + 'px')
+                   .html('Name: ' + datum.name + '<br>' + 
+                         'Year: ' + year + '<br>' +
+                         'Fall: ' + datum.fall + '<br>' +
+                         'Class: ' + datum.recclass + '<br>' +
+                         'Longitude: ' + datum.reclong + '<br>' +
+                         'Latitude: ' + datum.reclat + '<br>' +
+                         'Mass: ' + datum.mass);
+         })
+         .on('mouseout', () => {
+            tooltip.style('visibility', 'hidden');
+         });
+   }
+   
+   fetchData() {
+      const geoJsonUrl =  'https://raw.githubusercontent.com/hongyi0220/world.geo.json/master/countries.geo.json';
+      const meteoriteUrl = 'https://raw.githubusercontent.com/hongyi0220/ProjectReferenceData/master/meteorite-strike-data.json';
+      return {
+         then: {
+            makeGraph: () => d3.json(geoJsonUrl, dataset => this.makeGraph(dataset)),
+            bindData: (projection) => d3.json(meteoriteUrl, dataset => this.bindData(dataset, projection))
+         }
+      }
+   }
+   
+   componentDidMount() {
+      this.fetchData().then.makeGraph();
+   }
+   
+   render() {
+      return (
+         <div className='container'>
+            <div className='tooltip'></div>
+         </div>
+      );
+   }
+}
+
+ReactDOM.render(
+   <Graph />,
+   document.getElementById('graph')
+);
